@@ -118,13 +118,13 @@ class LGEDeHumidifier(LGEBaseHumidifier):
     def extra_state_attributes(self):
         """Return the optional state attributes with device specific additions."""
         state = {}
-        if humidity := self._api.state.device_features.get(
-            DehumidifierFeatures.HUMIDITY
-        ):
+        if self._api.state and (
+            humidity := self._api.state.device_features.get(DehumidifierFeatures.HUMIDITY)
+        ) is not None:
             state[ATTR_CURRENT_HUMIDITY] = humidity
         if fan_modes := self._device.fan_speeds:
             state[ATTR_FAN_MODES] = fan_modes
-            if fan_mode := self._api.state.fan_speed:
+            if self._api.state and (fan_mode := self._api.state.fan_speed):
                 state[ATTR_FAN_MODE] = fan_mode
 
         return state
@@ -132,11 +132,13 @@ class LGEDeHumidifier(LGEBaseHumidifier):
     @property
     def is_on(self) -> bool | None:
         """Return True if entity is on."""
-        return self._api.state.is_on
+        return self._api.state.is_on if self._api.state else None
 
     @property
     def mode(self) -> str | None:
         """Return current operation."""
+        if self._api.state is None:
+            return None
         if self._use_fan_modes:
             return self._api.state.fan_speed
         return self._api.state.operation_mode
@@ -156,13 +158,20 @@ class LGEDeHumidifier(LGEBaseHumidifier):
     @property
     def target_humidity(self) -> int | None:
         """Return the humidity we try to reach."""
+        if self._api.state is None:
+            return None
         return self._api.state.device_features.get(DehumidifierFeatures.TARGET_HUMIDITY)
 
     async def async_set_humidity(self, humidity: int) -> None:
         """Set new target humidity."""
         humidity_step = self._device.target_humidity_step or 1
-        target_humidity = humidity + (humidity % humidity_step)
-        await self._device.set_target_humidity(target_humidity)
+        # Quantize relative to device minimum, then clamp to its range.
+        min_value, max_value = self.min_humidity, self.max_humidity
+        max_steps = max(0, int((max_value - min_value) // humidity_step))
+        target_steps = round((humidity - min_value) / humidity_step)
+        target_steps = max(0, min(max_steps, target_steps))
+        target_humidity = min_value + target_steps * humidity_step
+        await self._device.set_target_humidity(int(target_humidity))
         self._api.async_set_updated()
 
     async def async_turn_on(self, **kwargs) -> None:

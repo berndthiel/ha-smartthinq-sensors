@@ -328,9 +328,9 @@ class LGEACClimate(LGEClimate):
         reverse_lookup = {v: k for k, v in modes.items()}
         if preset_mode == PRESET_NONE:
             curr_preset = self._attr_preset_mode
-            if curr_preset != PRESET_NONE and self._api.state.is_on:
-                op_mode = reverse_lookup[curr_preset]
-                await self.async_set_hvac_mode(PRESET_MODE_LOOKUP[op_mode]["hvac"])
+            if curr_preset and curr_preset != PRESET_NONE and self._api.state.is_on:
+                if (op_mode := reverse_lookup.get(curr_preset)) is not None:
+                    await self.async_set_hvac_mode(PRESET_MODE_LOOKUP[op_mode]["hvac"])
             return
 
         if (operation_mode := reverse_lookup.get(preset_mode)) is None:

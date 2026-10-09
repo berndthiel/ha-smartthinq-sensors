@@ -113,7 +113,7 @@ class LGELight(CoordinatorEntity, LightEntity):
 
     entity_description: ThinQLightEntityDescription
     _attr_has_entity_name = True
-    _attr_supported_color_modes = set(ColorMode.ONOFF)
+    _attr_supported_color_modes = {ColorMode.ONOFF}
     _attr_color_mode = ColorMode.ONOFF
 
     def __init__(
@@ -133,11 +133,11 @@ class LGELight(CoordinatorEntity, LightEntity):
         self._attr_effect_list = self._get_light_effects()
 
     def _get_light_effects(self) -> list[str]:
-        """Get available light effects."""
+        """Get available light effects without assuming a non-empty list."""
         if self.entity_description.effects_fn is None:
-            return None
-        avl_effects = self.entity_description.effects_fn(self._api).copy()
-        if self.entity_description.turn_off_fn is None:
+            return []
+        avl_effects = list(self.entity_description.effects_fn(self._api) or [])
+        if avl_effects and self.entity_description.turn_off_fn is None:
             self._turn_off_effect = avl_effects.pop(0)
         return avl_effects
 
@@ -159,6 +159,8 @@ class LGELight(CoordinatorEntity, LightEntity):
         if self.entity_description.value_fn is not None:
             effect = self.entity_description.value_fn(self._api)
         else:
+            if self._api.state is None:
+                return None
             effect = self._api.state.device_features.get(self.entity_description.key)
 
         off_effect = self._turn_off_effect
@@ -171,7 +173,7 @@ class LGELight(CoordinatorEntity, LightEntity):
         """Return if light is on."""
         if self._turn_off_effect is not None:
             return self.effect is not None
-        return self._api.state.is_on
+        return self._api.state.is_on if self._api.state else False
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the entity on."""
@@ -181,6 +183,8 @@ class LGELight(CoordinatorEntity, LightEntity):
             if not is_on:
                 await self.entity_description.turn_on_fn(self._api)
         elif effect is None:
+            if not self.effect_list:
+                raise NotImplementedError("LG light has no selectable on mode")
             effect = self._last_effect or self.effect_list[0]
 
         if not effect and is_on:

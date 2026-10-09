@@ -42,7 +42,10 @@ def _async_get_diagnostics(
 
     lg_device_id = None
     if device:
-        lg_device_id = next(iter(device.identifiers))[1]
+        lg_device_id = next(
+            (identifier for domain, identifier in device.identifiers if domain == DOMAIN),
+            None,
+        )
 
     devs_data = _async_devices_as_dict(hass, lg_device_id)
     diag_data[LGE_DEVICES] = devs_data
@@ -51,7 +54,7 @@ def _async_get_diagnostics(
         return diag_data
 
     # Get info for unsupported device if diagnostic is for the config entry
-    unsup_devices = hass.data[DOMAIN].get(UNSUPPORTED_DEVICES, {})
+    unsup_devices = hass.data.get(DOMAIN, {}).get(UNSUPPORTED_DEVICES, {})
     unsup_data = {}
     for dev_type, devices in unsup_devices.items():
         unsup_devs = [
@@ -71,7 +74,7 @@ def _async_devices_as_dict(
 ) -> dict:
     """Represent a LGE devices as a dictionary."""
 
-    lge_devices = hass.data[DOMAIN].get(LGE_DEVICES, {})
+    lge_devices = hass.data.get(DOMAIN, {}).get(LGE_DEVICES, {})
     devs_data = {}
     for dev_type, devices in lge_devices.items():
         lge_devs = {}

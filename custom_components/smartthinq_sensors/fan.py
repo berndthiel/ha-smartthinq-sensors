@@ -190,14 +190,16 @@ class LGEFanWrapper:
 
     def _get_fan_speeds(self) -> list[str]:
         """List of available speeds."""
-        avl_speeds = self._description.fanspeeds_fn(self._api).copy()
-        if self._description.turn_off_fn is None:
+        avl_speeds = list(self._description.fanspeeds_fn(self._api) or [])
+        if avl_speeds and self._description.turn_off_fn is None:
             self._turn_off_speed = avl_speeds.pop(0)
         return avl_speeds
 
     @property
     def fan_speed(self) -> str | None:
         """Return current speed."""
+        if self._api.state is None:
+            return None
         if self._description.fanspeed_fn:
             return self._description.fanspeed_fn(self._api)
         if feature := self._feature_key:
@@ -214,6 +216,8 @@ class LGEFanWrapper:
         """Return current preset."""
         if self._description.fanpreset_fn is None:
             return None
+        if self._api.state is None:
+            return None
         return self._description.fanpreset_fn(self._api)
 
     @property
@@ -228,7 +232,7 @@ class LGEFanWrapper:
         """Return if fan is on."""
         if self._description.turn_off_fn is None:
             return self.fan_speed != self._turn_off_speed
-        return self._api.state.is_on
+        return self._api.state.is_on if self._api.state else False
 
     async def async_set_speed(self, speed: str) -> None:
         """Set fan speed."""
@@ -237,7 +241,7 @@ class LGEFanWrapper:
     async def async_set_preset(self, preset: str) -> None:
         """Set fan preset."""
         if self._description.set_fanpreset_fn is None:
-            return NotImplementedError()
+            raise NotImplementedError()
         await self._description.set_fanpreset_fn(self._api, preset)
 
     async def async_turn_on(
@@ -248,6 +252,8 @@ class LGEFanWrapper:
         if self._description.turn_on_fn is not None:
             await self._description.turn_on_fn(self._api)
         elif not on_speed:
+            if not self.fan_speeds:
+                raise NotImplementedError("LG fan has no selectable on speed")
             on_speed = self._last_speed or self.fan_speeds[0]
 
         if on_speed:
@@ -347,8 +353,7 @@ class LGEFan(LGEBaseFan):
             raise NotImplementedError()
 
         if percentage == 0:
-            if self.preset_mode is None:
-                await self.async_turn_off()
+            await self.async_turn_off()
             return
 
         named_speed = percentage_to_ordered_list_item(

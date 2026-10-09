@@ -145,6 +145,7 @@ class SmartThinQFlowHandler(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Import a config entry."""
         self._is_import = True
+        import_config = import_config or {}
         self._region = import_config.get(CONF_REGION)
         if language := import_config.get(CONF_LANGUAGE):
             self._user_lang = language[0:2]

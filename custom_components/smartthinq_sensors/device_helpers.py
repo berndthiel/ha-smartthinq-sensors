@@ -79,23 +79,10 @@ class LGEBaseDevice:
 
     @staticmethod
     def format_time(hours, minutes):
-        """Return a time in format hh:mm:ss based on input hours and minutes."""
-        if not minutes:
-            return "0:00:00"
-
-        if not hours:
-            int_minutes = int(minutes)
-            if int_minutes >= 60:
-                int_hours = int(int_minutes / 60)
-                minutes = str(int_minutes - (int_hours * 60))
-                hours = str(int_hours)
-            else:
-                hours = "0"
-
-        if int(minutes) < 10:
-            minutes = f"0{int(minutes)}"
-        remain_time = [hours, minutes, "00"]
-        return ":".join(remain_time)
+        """Return h:mm:ss, including whole-hour times (e.g. 2:00:00)."""
+        total_minutes = int(hours or 0) * 60 + int(minutes or 0)
+        normalized_hours, normalized_minutes = divmod(total_minutes, 60)
+        return f"{normalized_hours}:{normalized_minutes:02d}:00"
 
     @property
     def device(self):

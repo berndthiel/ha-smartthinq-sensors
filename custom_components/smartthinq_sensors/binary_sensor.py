@@ -315,7 +315,9 @@ class LGEBinarySensor(CoordinatorEntity, BinarySensorEntity):
             return False
         if isinstance(ret_val, bool):
             return ret_val
-        ret_val = ret_val.lower()
+        if isinstance(ret_val, (int, float)):
+            return ret_val != 0
+        ret_val = str(ret_val).lower()
         if ret_val == STATE_ON:
             return True
         state = STATE_LOOKUP.get(ret_val, STATE_OFF)
