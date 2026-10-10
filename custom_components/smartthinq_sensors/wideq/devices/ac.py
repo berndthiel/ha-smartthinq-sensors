@@ -48,7 +48,7 @@ CTRL_WIND_DIRECTION = ["Control", "wDirCtrl"]
 CTRL_MISC = ["Control", "miscCtrl"]
 
 CTRL_FILTER_V2 = "filterMngStateCtrl"
-# CTRL_SETTING = "settingInfo"
+CTRL_SETTING = "settingInfo"
 # CTRL_WIND_MODE = "wModeCtrl"
 
 DUCT_ZONE_V1 = "DuctZone"
@@ -72,6 +72,7 @@ STATE_DUCT_ZONE = ["ZoneControl", "airState.ductZone.state"]
 STATE_POWER = [STATE_POWER_V1, "airState.energy.onCurrent"]
 STATE_HUMIDITY = ["SensorHumidity", "airState.humidity.current"]
 STATE_MODE_AIRCLEAN = ["AirClean", "airState.wMode.airClean"]
+STATE_MODE_AUTO_CLEAN = [None, "airState.miscFuncState.autoDry"]
 STATE_MODE_JET = ["Jet", "airState.wMode.jet"]
 STATE_LIGHTING_DISPLAY = ["DisplayControl", "airState.lightingState.displayControl"]
 STATE_AIRSENSORMON = ["SensorMon", "airState.quality.sensorMon"]
@@ -103,6 +104,7 @@ CMD_STATE_WDIR_HSWING = [CTRL_WIND_DIRECTION, "Set", STATE_WDIR_HSWING]
 CMD_STATE_WDIR_VSWING = [CTRL_WIND_DIRECTION, "Set", STATE_WDIR_VSWING]
 CMD_STATE_DUCT_ZONES = [CTRL_MISC, "Set", [DUCT_ZONE_V1, "airState.ductZone.control"]]
 CMD_STATE_MODE_AIRCLEAN = [CTRL_BASIC, "Set", STATE_MODE_AIRCLEAN]
+CMD_STATE_MODE_AUTO_CLEAN = [CTRL_SETTING, "Set", STATE_MODE_AUTO_CLEAN]
 CMD_STATE_MODE_JET = [CTRL_BASIC, "Set", STATE_MODE_JET]
 CMD_STATE_LIGHTING_DISPLAY = [CTRL_BASIC, "Set", STATE_LIGHTING_DISPLAY]
 CMD_RESERVATION_SLEEP_TIME = [CTRL_BASIC, "Set", STATE_RESERVATION_SLEEP_TIME]
@@ -590,6 +592,18 @@ class AirConditionerDevice(Device):
         return self._is_mode_supported(SUPPORT_AIRCLEAN)
 
     @cached_property
+    def is_mode_auto_clean_supported(self):
+        """Only enable Auto Clean when the V2 model defines both states."""
+        if not self.model_info.is_info_v2:
+            return False
+        key = self._get_state_key(STATE_MODE_AUTO_CLEAN)
+        return (
+            self.model_info.is_enum_type(key)
+            and self.model_info.enum_value(key, MODE_OFF) is not None
+            and self.model_info.enum_value(key, MODE_ON) is not None
+        )
+
+    @cached_property
     def supported_ligth_modes(self):
         """Return light switch modes supported."""
         if self._is_mode_supported(SUPPORT_LIGHT_SWITCH):
@@ -749,6 +763,17 @@ class AirConditionerDevice(Device):
         mode_key = MODE_AIRCLEAN_ON if status else MODE_AIRCLEAN_OFF
         mode = self.model_info.enum_value(keys[2], mode_key)
         await self.set(keys[0], keys[1], key=keys[2], value=mode)
+
+    async def set_mode_auto_clean(self, status: bool):
+        """Enable/disable post-operation Auto Clean / Auto Dry."""
+        if not self.is_mode_auto_clean_supported:
+            raise ValueError("Auto Clean is not supported by this LG model")
+        keys = self._get_cmd_keys(CMD_STATE_MODE_AUTO_CLEAN)
+        state = MODE_ON if status else MODE_OFF
+        value = self.model_info.enum_value(keys[2], state)
+        if value is None:
+            raise ValueError(f"LG Auto Clean value is unavailable: {state}")
+        await self.set(keys[0], keys[1], key=keys[2], value=value)
 
     async def set_mode_jet(self, status: bool):
         """Set the Jet mode on or off."""
@@ -1189,6 +1214,19 @@ class AirConditionerStatus(DeviceStatus):
         return self._update_feature(AirConditionerFeatures.MODE_AIRCLEAN, status, False)
 
     @property
+    def mode_auto_clean(self):
+        """Read the persisted Auto Clean setting from the ThinQ snapshot."""
+        if not self._device.is_mode_auto_clean_supported:
+            return None
+        key = self._get_state_key(STATE_MODE_AUTO_CLEAN)
+        value = self.lookup_enum(key, True)
+        if value not in (MODE_OFF, MODE_ON):
+            return None
+        return self._update_feature(
+            AirConditionerFeatures.MODE_AUTO_CLEAN, value == MODE_ON, False
+        )
+
+    @property
     def mode_jet(self):
         """Return Jet Mode status."""
         if self._device.supported_mode_jet == JetModeSupport.NONE:
@@ -1397,6 +1435,7 @@ class AirConditionerStatus(DeviceStatus):
             self.pm25,
             self.pm1,
             self.mode_airclean,
+            self.mode_auto_clean,
             self.mode_jet,
             self.lighting_display,
             self.water_in_current_temp,
